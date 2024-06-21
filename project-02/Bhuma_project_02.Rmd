@@ -1,0 +1,173 @@
+---
+title: "Mini project 2 - Marathon Results"
+author: "Prathyusha Bhuma - pbhuma7210@floridapoly.edu"
+output: 
+  html_document:
+    keep_md: true
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r}
+#Loading libraries
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(sf)
+library(maps)
+library(broom)
+```
+
+```{r}
+# Loading data
+marathon_results<-read_csv("/Users/prathyushabhuma/Documents/Florida Polytechnic University/Data Visualization and Reproducible Research/dataviz_final_project/data/marathon_results_2017.csv")
+
+#dimensions 
+dim(marathon_results)
+```
+
+```{r}
+head(marathon_results)
+```
+
+```{r}
+# Display the structure  of the dataset
+str(marathon_results)
+
+```
+```{r}
+# Display the  summary of the dataset
+summary(marathon_results)
+```
+
+```{r}
+colSums(is.na(marathon_results))
+```
+
+```{r}
+# 1. Interactive Plot
+# Plot distribution of marathon finish times
+finish_time_plot <- ggplot(marathon_results, aes(x = `Official Time`)) +
+  geom_histogram(binwidth = 300, fill = "blue", color = "white") +
+  labs(title = "Distribution of Marathon Finish Times", x = "Finish Time", y = "Count")
+
+finish_time_plot
+
+```
+```{r}
+# Convert to interactive plot using plotly
+interactive_finish_time_plot <- ggplotly(finish_time_plot)
+interactive_finish_time_plot
+```
+```{r}
+# Save the interactive plot as an HTML file
+htmlwidgets::saveWidget(interactive_finish_time_plot, "interactive_finish_time_plot.html")
+```
+
+`
+```{r}
+# Load world shapefile from Natural Earth
+# https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+world_shapes <- read_sf("/Users/prathyushabhuma/Documents/Florida Polytechnic University/Data Visualization and Reproducible Research/MiniProject2/Data/ne_110m_admin_0_countries")
+```
+
+```{r}
+head(world_shapes)
+```
+
+
+```{r}
+# Create a map of Participants origins 
+# We'll map the count of Participants from each country if available
+country_count <- marathon_results %>%
+  group_by(Country) %>%
+  summarize(users = n())
+
+world_shapes <- world_shapes %>%
+  mutate(join_key = if_else(ISO_A3_EH == "NOR", SU_A3, ISO_A3_EH))
+
+country_counts <- country_count %>%
+  mutate(join_key = if_else(Country == "NOR", "NOR", Country))
+
+map_data <- left_join(world_shapes, country_counts, by = c("SU_A3" = "join_key"))
+
+# Plot the map with tmaps
+ggplot(map_data) +
+  geom_sf(aes(fill = users)) +
+  scale_fill_gradient(low = "lightgreen", high = "orange", na.value = "lightgray", name = "Participants") +
+  ggtitle("Marathon Participants by Country") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        legend.key.size = unit(2, 'cm'),
+        legend.key.height = unit(1, 'cm'),
+        legend.key.width = unit(1, 'cm'),
+        legend.position = "bottom",
+        panel.grid = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank())
+```
+
+
+
+
+```{r}
+## Linear model predicting finish time based on age and gender
+# Convert 'Official Time' to numeric (total minutes)
+marathon_results <- marathon_results %>%
+  mutate(Official_Time_Minutes = as.numeric(hms::as_hms(`Official Time`)) / 60) %>%
+  mutate(`M/F` = as.factor(`M/F`))
+  
+
+# Fit the linear model predicting finish time based on age and gender
+lm_model <- lm(Official_Time_Minutes ~ Age + `M/F`, data = marathon_results)
+
+# Display the model summary
+summary(lm_model)
+
+# Plot model coefficients
+coef_plot <- tidy(lm_model) %>%
+  ggplot(aes(x = term, y = estimate, ymin = estimate - std.error, ymax = estimate + std.error)) +
+  geom_bar(stat = "identity", fill = "skyblue", width = 0.5) +
+  geom_errorbar(width = 0.2, color = "black") +
+  labs(title = "Linear Model Coefficients", x = "Term", y = "Estimate") +
+  theme_minimal()
+
+# Display the plot
+print(coef_plot)
+
+```
+
+```{r}
+table(marathon_results$`M/F`)
+```
+
+
+```{r}
+# Extension to the original mini project that was submitted earlier based on the feedback provided
+
+# Displaying the summary of the linear model
+summary(lm_model)
+
+# Plotting diagnostic plots to check the assumptions of the linear model
+par(mfrow = c(2, 2))  # Arrange plots in a 2x2 grid
+plot(lm_model)
+par(mfrow = c(1, 1))  # Reset plot layout
+
+# Visualizing actual vs. predicted values
+marathon_results$predicted_time <- predict(lm_model, marathon_results)
+
+ggplot(marathon_results, aes(x = Age, y = Official_Time_Minutes, color = `M/F`)) +
+  geom_point(alpha = 0.5) +
+  geom_line(aes(y = predicted_time), color = "black", linetype = "dashed") +
+  labs(title = "Actual vs. Predicted Finishing Time by Age and Gender",
+       x = "Age",
+       y = "Finishing Time (Minutes)") +
+  scale_color_manual(values = c("M" = "blue", "F" = "pink")) +
+  theme_minimal()
+
+```
+
+Comment: The scatter plot shows the relationship between the official finishing times (in minutes) and the ages of marathon participants, which distinguishes the gender of male and female runners by color. Blue dots represent male finishers, while pink dots represent female finishers. The black dashed line illustrates the linear regression model's predicted finishing times based on age and gender. The plot reveals that finishing times tend to increase with age, and on average, males generally have faster finishing times compared to females. The spread of data indicates variability in finishing times across different ages and genders, highlighting the complex factors influencing marathon performance.
